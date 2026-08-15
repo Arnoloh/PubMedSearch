@@ -1,0 +1,19 @@
+[project]
+name = "pubmed-csv"
+version = "0.1.0"
+description = "Desktop app to search PubMed by keyword and export results to CSV"
+requires-python = ">=3.11"
+dependencies = [
+    "pypubmed @ git+https://github.com/lescientifik/pypubmed.git",
+    "defusedxml",  # used directly to re-read titles that contain inline markup
+]
+
+[project.scripts]
+pubmed-csv = "pubmed_csv.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["pubmed_csv"]
