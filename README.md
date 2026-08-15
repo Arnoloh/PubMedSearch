@@ -205,3 +205,4 @@ Searches run on a background thread, so the window stays responsive.
 .venv/bin/python -m unittest discover -s tests
 ```
 # yanis
+# yanis
