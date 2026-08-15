@@ -120,6 +120,14 @@ def run_search(
     return SearchOutcome(articles=articles, total_matches=result.count)
 
 
+def _rows(articles: list[Article]) -> list[list[str]]:
+    """The articles as plain rows, in the CSV_COLUMNS order."""
+    return [
+        [article.title, article.pmid, article.doi or "", article.url]
+        for article in articles
+    ]
+
+
 def write_csv(articles: list[Article], path: str | Path) -> None:
     """Write the articles to a CSV file with title, pmid, doi and url.
 
@@ -128,5 +136,44 @@ def write_csv(articles: list[Article], path: str | Path) -> None:
     with Path(path).open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.writer(handle, dialect="excel")
         writer.writerow(CSV_COLUMNS)
-        for article in articles:
-            writer.writerow([article.title, article.pmid, article.doi or "", article.url])
+        writer.writerows(_rows(articles))
+
+
+def write_xlsx(articles: list[Article], path: str | Path) -> None:
+    """Write the articles to a real Excel workbook.
+
+    Worth preferring over CSV: no encoding or separator guessing when Excel
+    opens it, and the links are clickable.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    rows = _rows(articles)
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "PubMed results"
+
+    sheet.append(CSV_COLUMNS)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+
+    for row in rows:
+        sheet.append(row)
+
+    link_column = CSV_COLUMNS.index("url") + 1
+    link_style = Font(color="0563C1", underline="single")
+    for row_number in range(2, sheet.max_row + 1):
+        cell = sheet.cell(row=row_number, column=link_column)
+        if cell.value:
+            cell.hyperlink = cell.value
+            cell.font = link_style
+
+    # Roughly fit the columns, capped so one long title cannot swallow the sheet.
+    for index, column in enumerate(CSV_COLUMNS, start=1):
+        longest = max([len(column)] + [len(row[index - 1]) for row in rows])
+        sheet.column_dimensions[get_column_letter(index)].width = min(longest + 2, 80)
+
+    sheet.freeze_panes = "A2"  # keep the header visible while scrolling
+    workbook.save(Path(path))

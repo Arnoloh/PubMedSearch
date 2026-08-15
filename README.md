@@ -171,9 +171,20 @@ fields are skipped, so a half-filled form still searches, and a blank row in
 the middle adds no bracket. Full PubMed syntax works inside a field too, e.g.
 `smith j[Author]` or `(cancer OR tumour)`.
 
-### CSV output
+### Output: Excel or CSV
 
-UTF-8 with a BOM, so Excel opens accented titles correctly.
+**Export…** saves either format — the choice is the file name. Anything ending
+in `.csv` is written as CSV; everything else becomes an Excel workbook, which is
+what the dialog offers first.
+
+Both hold the same four columns: `title`, `pmid`, `doi`, `url`.
+
+**Excel (.xlsx)** is the better default: no encoding or separator guessing when
+Excel opens it, links are clickable, the header row is bold and frozen, and the
+columns arrive already sized (titles capped so one long one cannot swallow the
+sheet).
+
+**CSV** is UTF-8 with a BOM, so Excel still reads accented titles correctly.
 
 ```csv
 title,pmid,doi,url
@@ -194,15 +205,7 @@ response, with no extra requests.
 | File | Purpose |
 |------|---------|
 | [pubmed_csv/query.py](pubmed_csv/query.py) | Builds the boolean query from the keyword rows |
-| [pubmed_csv/export.py](pubmed_csv/export.py) | Runs the search, writes the 4-column CSV |
+| [pubmed_csv/export.py](pubmed_csv/export.py) | Runs the search, writes the Excel and CSV files |
 | [pubmed_csv/app.py](pubmed_csv/app.py) | Tkinter window |
 
 Searches run on a background thread, so the window stays responsive.
-
-## Tests
-
-```bash
-.venv/bin/python -m unittest discover -s tests
-```
-# yanis
-# yanis

@@ -1,7 +1,7 @@
 name: Build Windows executable
 
 # PyInstaller cannot cross-compile, so the .exe is built on a Windows runner.
-# Run it from the Actions tab (Run workflow), or let a push to main trigger it.
+# Run it from the Actions tab (Run workflow), or just push to master.
 on:
   push:
     branches: [master]
@@ -35,7 +35,7 @@ jobs:
       # Download this from the run's summary page once the job is green.
       - uses: actions/upload-artifact@v4
         with:
-          name: PubMedSearch-windows
+          name: PubMedSearch
           path: dist/PubMedSearch.exe
           if-no-files-found: error
 

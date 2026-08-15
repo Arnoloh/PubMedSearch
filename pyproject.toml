@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pypubmed @ git+https://github.com/lescientifik/pypubmed.git",
     "defusedxml",  # used directly to re-read titles that contain inline markup
+    "openpyxl",  # Excel (.xlsx) export
 ]
 
 [project.scripts]

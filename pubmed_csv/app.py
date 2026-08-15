@@ -12,6 +12,7 @@ from pubmed_csv.export import (
     SearchOutcome,
     run_search,
     write_csv,
+    write_xlsx,
 )
 from pubmed_csv.query import OPERATORS, Term, build_query
 
@@ -190,7 +191,7 @@ class PubMedApp(ttk.Frame):
         self.search_button.grid(row=0, column=0, sticky="w")
 
         self.export_button = ttk.Button(
-            frame, text="Export CSV…", command=self._export_csv, state="disabled"
+            frame, text="Export…", command=self._export, state="disabled"
         )
         self.export_button.grid(row=0, column=1, sticky="w", padx=(PAD, 0))
 
@@ -429,26 +430,32 @@ class PubMedApp(ttk.Frame):
 
     # ------------------------------------------------------------ export
 
-    def _export_csv(self) -> None:
+    def _export(self) -> None:
+        """Save the results, as Excel or CSV depending on the chosen name."""
         if not self.articles:
             return
 
         path = filedialog.asksaveasfilename(
-            title="Save results as CSV",
-            defaultextension=".csv",
-            initialfile="pubmed_results.csv",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Save results",
+            defaultextension=".xlsx",
+            initialfile="pubmed_results.xlsx",
+            filetypes=[
+                ("Excel workbook", "*.xlsx"),
+                ("CSV file", "*.csv"),
+                ("All files", "*.*"),
+            ],
         )
         if not path:
             return
 
+        write = write_csv if path.lower().endswith(".csv") else write_xlsx
         try:
-            write_csv(self.articles, path)
+            write(self.articles, path)
         except OSError as error:
             messagebox.showerror("Export failed", str(error))
             return
 
-        self.status.set(f"Saved {len(self.articles)} articles to {path}")
+        self.status.set(f"Saved {len(self.articles):,} articles to {path}")
 
     def _open_selected(self, _event=None) -> None:
         selection = self.tree.selection()

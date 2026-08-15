@@ -15,7 +15,7 @@ a = Analysis(
     datas=[],
     # pypubmed reaches ElementTree through the defusedxml package, which the
     # import scan does not always follow.
-    hiddenimports=["defusedxml.ElementTree"],
+    hiddenimports=["defusedxml.ElementTree", "openpyxl"],
     hookspath=[],
     runtime_hooks=[],
     excludes=["unittest"],
