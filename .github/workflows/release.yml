@@ -1,0 +1,66 @@
+name: Publish release
+
+# Runs the Windows build workflow, and publishes only if it succeeds.
+#
+# It is called rather than duplicated here, because `needs:` cannot point at
+# a job in another workflow file — calling it keeps one definition of the
+# build while still gating the release on it.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  # Cheap checks first, so a mistagged release fails in seconds rather than
+  # once the build is underway.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The build stamps the tag into pubmed_csv/version.py, so the tag has to
+      # be something stamp_version.py accepts. Proving it here, on a throwaway
+      # checkout, fails in seconds instead of once the build is underway.
+      - name: The tag must be a stampable version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          python stamp_version.py "$GITHUB_REF_NAME"
+          git --no-pager diff -- pubmed_csv/version.py
+
+  windows:
+    needs: verify
+    uses: ./.github/workflows/build-windows.yml
+
+  release:
+    # A failure in the build stops the release.
+    needs: windows
+    # Dispatching from a branch still builds, but must never publish a release
+    # named after that branch.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The artifact from the build above.
+      - uses: actions/download-artifact@v8
+        with:
+          name: PubMedSearch.exe
+          path: release
+
+      # An artifact quietly renamed upstream would otherwise ship an empty
+      # release.
+      - name: Check the build is present
+        run: |
+          test -f release/PubMedSearch.exe
+          ls -lh release
+
+      - name: Publish the release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release/PubMedSearch.exe \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
