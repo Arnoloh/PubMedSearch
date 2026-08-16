@@ -55,6 +55,10 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
+          # Keep the macOS artifact as PubMedSearch-macos-arm64.zip. Without
+          # this, v8 expands that zip file while downloading and the release
+          # check cannot find the expected filename.
+          skip-decompress: true
 
       - name: Collect the builds
         run: |
