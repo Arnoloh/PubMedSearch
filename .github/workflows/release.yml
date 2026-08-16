@@ -62,7 +62,7 @@ jobs:
           mkdir -p release
           mv artifacts/PubMedSearch.exe/PubMedSearch.exe release/
           mv artifacts/PubMedSearch-linux-amd64/PubMedSearch-linux-amd64 release/
-          mv artifacts/PubMedSearch-macos-arm64.app release/PubMedSearch-macos-arm64.app
+          mv artifacts/PubMedSearch-macos-arm64.app release/
           ls -lh release
 
       # The release promises three platforms, so refuse to publish a partial
@@ -83,15 +83,15 @@ jobs:
             exit 1
           fi
 
-      - name: Package the macOS app for the GitHub release
-        run: zip -yr release/PubMedSearch-macos-arm64.zip release/PubMedSearch-macos-arm64.app
+      # - name: Package the macOS app for the GitHub release
+      #   run: zip -yr release/PubMedSearch-macos-arm64.zip release/PubMedSearch-macos-arm64.app
 
       - name: Publish the release
         run: |
           gh release create "$GITHUB_REF_NAME" \
             release/PubMedSearch.exe \
             release/PubMedSearch-linux-amd64 \
-            release/PubMedSearch-macos-arm64.zip \
+            release/PubMedSearch-macos-arm64.app \
             --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
