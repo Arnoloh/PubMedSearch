@@ -50,8 +50,7 @@ jobs:
       contents: write
 
     steps:
-      # Every artifact from the builds above. v8 matches the upload-artifact v7
-      # the builds use, so the un-archived uploads come back as plain files.
+      # Every artifact from the builds above.
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
@@ -59,7 +58,9 @@ jobs:
       - name: Collect the builds
         run: |
           mkdir -p release
-          find artifacts -type f -exec mv {} release/ \;
+          mv artifacts/PubMedSearch.exe/PubMedSearch.exe release/
+          mv artifacts/PubMedSearch-linux-amd64/PubMedSearch-linux-amd64 release/
+          mv artifacts/PubMedSearch-macos-arm64.app/PubMedSearch.app release/PubMedSearch-macos-arm64.app
           ls -lh release
 
       # The release promises three platforms, so refuse to publish a partial
@@ -70,17 +71,25 @@ jobs:
           missing=""
           for expected in \
             "PubMedSearch.exe" \
-            "PubMedSearch-macos-arm64.zip" \
+            "PubMedSearch-macos-arm64.app" \
             "PubMedSearch-linux-amd64"
           do
-            test -f "release/$expected" || missing="$missing $expected"
+            test -e "release/$expected" || missing="$missing $expected"
           done
           if [ -n "$missing" ]; then
             echo "Missing from the build artifacts:$missing"
             exit 1
           fi
 
+      - name: Package the macOS app for the GitHub release
+        run: zip -yr release/PubMedSearch-macos-arm64.zip release/PubMedSearch-macos-arm64.app
+
       - name: Publish the release
-        run: gh release create "$GITHUB_REF_NAME" release/* --generate-notes
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release/PubMedSearch.exe \
+            release/PubMedSearch-linux-amd64 \
+            release/PubMedSearch-macos-arm64.zip \
+            --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
