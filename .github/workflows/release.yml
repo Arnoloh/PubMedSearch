@@ -50,6 +50,8 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       # Every artifact from the builds above.
       - uses: actions/download-artifact@v8
         with:
