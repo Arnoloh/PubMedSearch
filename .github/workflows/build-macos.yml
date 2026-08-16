@@ -1,0 +1,59 @@
+name: Build macOS app
+
+# PyInstaller cannot cross-compile, and cannot cross-build architectures
+# either, so an Apple Silicon app needs an Apple Silicon runner.
+# Run it from the Actions tab (Run workflow), or just push to master.
+# release.yml also calls this workflow, and publishes only once it succeeds.
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build:
+    name: macos-arm64
+    runs-on: macos-latest # Apple Silicon
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Guards against GitHub quietly repointing the label at another CPU:
+      # the artifact name promises arm64, so verify it.
+      - name: Confirm the runner architecture
+        run: |
+          echo "runner reports: $(uname -m)"
+          test "$(uname -m)" = "arm64"
+
+      - name: Check Tkinter works before building on it
+        run: python -c "import tkinter; print('Tk', tkinter.TkVersion)"
+
+      # Must run before the install and the build, so the packaged app reports
+      # the tag it was built from.
+      - name: Stamp the version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python stamp_version.py "$GITHUB_REF_NAME"
+
+      - name: Install the app and its build tool
+        run: pip install . pyinstaller
+
+      - name: Build
+        run: pyinstaller PubMedSearch.spec
+
+      # ditto keeps the bundle's permissions and ad-hoc signature, which a
+      # plain upload-artifact zip strips, leaving a .app that will not open.
+      - name: Package the app
+        run: |
+          test -d dist/PubMedSearch.app
+          ditto -c -k --keepParent dist/PubMedSearch.app PubMedSearch-macos-arm64.zip
+
+      # Download this from the run's summary page once the job is green.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PubMedSearch-macos-arm64
+          path: PubMedSearch-macos-arm64.zip
+          if-no-files-found: error

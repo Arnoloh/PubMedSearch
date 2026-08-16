@@ -1,0 +1,63 @@
+name: Build Linux binary
+
+# PyInstaller cannot cross-compile, so the Linux binary is built on a Linux
+# runner. Run it from the Actions tab (Run workflow), or just push to master.
+# release.yml also calls this workflow, and publishes only once it succeeds.
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build:
+    name: linux-amd64
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Guards against GitHub quietly repointing the label at another CPU:
+      # the artifact name promises amd64, so verify it.
+      - name: Confirm the runner architecture
+        run: |
+          echo "runner reports: $(uname -m)"
+          test "$(uname -m)" = "x86_64"
+
+      # setup-python's Linux build needs the Tcl/Tk runtime beside it, or
+      # PyInstaller bundles an app that dies on launch with no window.
+      - name: Install the Tk runtime
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      - name: Check Tkinter works before building on it
+        run: python -c "import tkinter; print('Tk', tkinter.TkVersion)"
+
+      # Must run before the install and the build, so the packaged app reports
+      # the tag it was built from.
+      - name: Stamp the version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python stamp_version.py "$GITHUB_REF_NAME"
+
+      - name: Install the app and its build tool
+        run: pip install . pyinstaller
+
+      - name: Build
+        run: pyinstaller PubMedSearch.spec
+
+      # tar rather than a plain artifact upload, which would strip the
+      # executable bit and leave a binary nobody can run.
+      - name: Package the binary
+        run: |
+          test -f dist/PubMedSearch
+          tar czf PubMedSearch-linux-amd64.tar.gz -C dist PubMedSearch
+
+      # Download this from the run's summary page once the job is green.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PubMedSearch-linux-amd64
+          path: PubMedSearch-linux-amd64.tar.gz
+          if-no-files-found: error

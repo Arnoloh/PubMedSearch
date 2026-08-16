@@ -14,11 +14,14 @@ from pubmed_csv.export import (
     write_csv,
     write_xlsx,
 )
+from pubmed_csv import history, updates
 from pubmed_csv.query import OPERATORS, Term, build_query
+from pubmed_csv.version import __version__
 
 WINDOW_TITLE = "PubMed Search"
 PAD = 8
 POLL_INTERVAL_MS = 100
+UPDATE_FIRST_CHECK_MS = 1200  # let the window draw before any update dialog
 
 # Results table columns: (id, heading, starting width, minimum width).
 # No column stretches: Tk overrides the width of a stretching column to fill
@@ -102,11 +105,15 @@ class PubMedApp(ttk.Frame):
         self.limit_hint = tk.StringVar()
         self.status = tk.StringVar(value="Enter one or more keywords, then run the search.")
 
+        self.searches = history.load_searches()
+
         self._build_ui()
+        self._refresh_history()
         self._add_row()
         self._add_row()
         master.bind("<Return>", lambda _event: self._start_search())
         self.rows[0].entry.focus_set()
+        self._start_update_check()
 
     # ------------------------------------------------------------------ UI
 
@@ -130,9 +137,20 @@ class PubMedApp(ttk.Frame):
         self.keywords_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
         self.keywords_frame.columnconfigure(1, weight=1)
 
-        ttk.Button(frame, text="+ Add keyword", command=self._add_row).grid(
-            row=1, column=0, sticky="w", pady=(PAD, 0)
+        actions = ttk.Frame(frame)
+        actions.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(PAD, 0))
+        actions.columnconfigure(1, weight=1)
+
+        ttk.Button(actions, text="+ Add keyword", command=self._add_row).grid(
+            row=0, column=0, sticky="w"
         )
+
+        ttk.Label(actions, text="Recent searches").grid(
+            row=0, column=2, sticky="e", padx=(PAD, PAD // 2)
+        )
+        self.history_box = ttk.Combobox(actions, state="readonly", width=48)
+        self.history_box.grid(row=0, column=3, sticky="e")
+        self.history_box.bind("<<ComboboxSelected>>", self._restore_search)
 
     def _build_query_preview(self) -> None:
         frame = ttk.Frame(self)
@@ -288,6 +306,40 @@ class PubMedApp(ttk.Frame):
     def _refresh_query(self) -> None:
         self.query_preview.set(build_query(row.term() for row in self.rows))
 
+    def _set_terms(self, terms: list[Term]) -> None:
+        """Replace the form's rows with a stored search."""
+        for row in self.rows:
+            row.destroy()
+        self.rows = []
+
+        for term in terms:
+            row = KeywordRow(self.keywords_frame, self._refresh_query, self._remove_row)
+            row.keyword.set(term.keyword)
+            row.operator.set(term.operator)
+            self.rows.append(row)
+
+        if not self.rows:  # never leave the form with nothing to type into
+            self.rows.append(
+                KeywordRow(self.keywords_frame, self._refresh_query, self._remove_row)
+            )
+        self._refresh_rows()
+
+    # ----------------------------------------------------------- history
+
+    def _refresh_history(self) -> None:
+        self.history_box.configure(values=[build_query(t) for t in self.searches])
+
+    def _restore_search(self, _event=None) -> None:
+        index = self.history_box.current()
+        if 0 <= index < len(self.searches):
+            self._set_terms(self.searches[index])
+            self.status.set("Search restored. Adjust it or press Search.")
+
+    def _record_search(self, terms: list[Term]) -> None:
+        self.searches = history.remember(self.searches, terms)
+        history.save_searches(self.searches)
+        self._refresh_history()
+
     # ------------------------------------------------------------ search
 
     def _on_search_button(self) -> None:
@@ -302,7 +354,8 @@ class PubMedApp(ttk.Frame):
         if self.searching:  # the Return key can fire while one is running
             return
 
-        query = build_query(row.term() for row in self.rows)
+        terms = [row.term() for row in self.rows]
+        query = build_query(terms)
         if not query:
             messagebox.showwarning("No keywords", "Enter at least one keyword to search.")
             return
@@ -311,6 +364,7 @@ class PubMedApp(ttk.Frame):
         if max_results is False:  # invalid entry, already reported
             return
 
+        self._record_search(terms)
         self.cancel_event.clear()
         self._set_searching(True)
         self.status.set(f"Searching PubMed for {query} …")
@@ -461,6 +515,42 @@ class PubMedApp(ttk.Frame):
         selection = self.tree.selection()
         if selection:
             webbrowser.open(self.tree.set(selection[0], "url"))
+
+    # ------------------------------------------------------ update check
+
+    def _start_update_check(self) -> None:
+        """Ask GitHub for a newer release, off the UI thread."""
+        self.update_queue: queue.Queue = queue.Queue()
+        threading.Thread(target=self._update_worker, daemon=True).start()
+        self.after(UPDATE_FIRST_CHECK_MS, self._poll_update)
+
+    def _update_worker(self) -> None:
+        # check_for_update swallows its own failures; guard anyway so a
+        # surprise here can never take the app down on startup.
+        try:
+            self.update_queue.put(updates.check_for_update(__version__))
+        except Exception:
+            self.update_queue.put(None)
+
+    def _poll_update(self) -> None:
+        try:
+            release = self.update_queue.get_nowait()
+        except queue.Empty:
+            self.after(POLL_INTERVAL_MS * 5, self._poll_update)
+            return
+
+        if release is not None:
+            self._offer_update(release)
+
+    def _offer_update(self, release: updates.Release) -> None:
+        wants_it = messagebox.askyesno(
+            "Update available",
+            f"Version {release.version} is available.\n"
+            f"You are running {__version__}.\n\n"
+            "Open the download page?",
+        )
+        if wants_it:
+            webbrowser.open(release.url)
 
 
 def main() -> None:

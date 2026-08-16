@@ -1,0 +1,3 @@
+pypubmed @ git+https://github.com/lescientifik/pypubmed.git
+defusedxml
+openpyxl

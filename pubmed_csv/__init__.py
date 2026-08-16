@@ -8,8 +8,10 @@ from pubmed_csv.export import (
     write_xlsx,
 )
 from pubmed_csv.query import OPERATORS, Term, build_query
+from pubmed_csv.version import __version__
 
 __all__ = [
+    "__version__",
     "CSV_COLUMNS",
     "OPERATORS",
     "SearchOutcome",

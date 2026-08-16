@@ -33,22 +33,34 @@ a macOS binary on macOS. Building on your Mac produces a Mac binary, not an exe.
 ### Windows .exe without a Windows machine (GitHub Actions)
 
 [.github/workflows/build-windows.yml](.github/workflows/build-windows.yml) builds
-it on a Windows runner, for free:
+it on a Windows runner, for free. Open the repo's **Actions** tab → **Build
+Windows executable** → **Run workflow**; when the job turns green, the
+`PubMedSearch` artifact on the run's summary page contains `PubMedSearch.exe`.
 
-```bash
-git init && git add -A && git commit -m "PubMed search app"
-gh repo create pubmed-csv --private --source=. --push
-```
+### macOS and Linux builds
 
-Then open the repo's **Actions** tab → **Build Windows executable** → **Run
-workflow**. When the job turns green, `PubMedSearch-windows` is downloadable
-from the run's summary page, containing `PubMedSearch.exe`.
+One workflow per target, each runnable on its own from the **Actions** tab:
 
-Pushing a tag publishes the exe as a release instead:
+| Workflow | Runner | Artifact |
+|---|---|---|
+| [build-windows.yml](.github/workflows/build-windows.yml) | `windows-latest` | `PubMedSearch.exe` |
+| [build-macos.yml](.github/workflows/build-macos.yml) | `macos-latest` (arm64) | `PubMedSearch-macos-arm64.zip` |
+| [build-linux.yml](.github/workflows/build-linux.yml) | `ubuntu-24.04` (x86_64) | `PubMedSearch-linux-amd64.tar.gz` |
 
-```bash
-git tag v1.0.0 && git push origin v1.0.0
-```
+The macOS build produces a real `PubMedSearch.app`, so it opens from Finder
+instead of launching a Terminal window, and it is zipped with `ditto` to keep
+the bundle's permissions and ad-hoc signature — a plain artifact upload strips
+those and leaves an app that refuses to open. The Linux binary is tarred for
+the same reason: a bare upload loses the executable bit.
+
+Each build asserts `uname -m` matches the architecture its artifact name
+promises, so it fails loudly rather than shipping an arm64 binary labelled
+amd64 if a runner label is ever repointed. The Linux build installs
+`python3-tk` first: without the Tcl/Tk runtime beside it, PyInstaller happily
+bundles an app that dies on launch with no window.
+
+Being unsigned, the macOS app is not notarised — Gatekeeper blocks it on first
+open, and the way past is right-click → *Open* rather than a double-click.
 
 ### On a Windows machine
 
@@ -69,19 +81,13 @@ pyinstaller PubMedSearch.spec
 .venv/bin/pyinstaller PubMedSearch.spec   # -> dist/PubMedSearch
 ```
 
-### With Docker (Wine)
+### Not with Docker, on this Mac
 
-Plain Docker cannot do it: Linux containers build Linux binaries, and Windows
-containers need a Windows kernel, so they do not run on macOS at all. What does
-work is **Wine** inside a Linux container, running Windows Python and
-PyInstaller — [build-windows-docker.sh](build-windows-docker.sh) wraps that:
-
-```bash
-./build-windows-docker.sh     # -> dist/PubMedSearch.exe
-```
-
-**This does not work on Apple Silicon.** Tried on an M5: Wine aborts inside its
-own memory setup before reaching any project code.
+Worth recording, since it looks like it should work. Plain Docker cannot build
+an exe — Linux containers build Linux binaries, and Windows containers need a
+Windows kernel. Running Windows Python under **Wine** in a Linux container can,
+but not on Apple Silicon: Wine aborts inside its own memory setup, before
+reaching any project code.
 
 ```
 wine: dlls/ntdll/unix/virtual.c:267: anon_mmap_fixed:
@@ -89,15 +95,10 @@ wine: dlls/ntdll/unix/virtual.c:267: anon_mmap_fixed:
 qemu: uncaught target signal 6 (Aborted)
 ```
 
-Wine needs an x86_64 CPU and the image is `linux/amd64` only. Rosetta does not
-rescue it — Rosetta cannot run 32-bit x86, which Wine's startup helpers use, so
-they fall back to QEMU, and Wine's `ntdll` reserves memory at fixed low
-addresses that QEMU's address space cannot satisfy. No image or flag works
-around that.
-
-Use this script on an **x86_64 Linux** host, where nothing is emulated. On
-Apple Silicon, build through GitHub Actions or a Windows VM instead. Test the
-exe on real Windows either way — Wine is a compatibility layer, not Windows.
+Wine needs an x86_64 CPU, and Rosetta does not rescue it: Rosetta cannot run
+32-bit x86, which Wine's startup helpers use, so they fall back to QEMU — and
+Wine's `ntdll` reserves memory at fixed low addresses that QEMU's address space
+cannot satisfy. No image or flag works around that. Use GitHub Actions.
 
 ### Things to expect
 
@@ -121,6 +122,75 @@ exe on real Windows either way — Wine is a compatibility layer, not Windows.
 5. Press **Search** (or hit Return), then **Export CSV…** to save the file.
 
 Double-click any row in the results table to open the article in your browser.
+
+### Update check
+
+On every launch the app asks GitHub whether a newer release exists, and offers
+to open the download page if so. The check runs on a background thread, so it
+never delays startup, and it stays silent whenever the answer is not a clear
+yes — offline, no releases yet, rate limited, or already up to date. Nothing to
+configure and nothing to dismiss in the normal case.
+
+It needs the repo to be public, which it is: a distributed app carries no
+credentials, and a private repo would answer 404 and leave the check silently
+doing nothing.
+
+## Releasing a new version
+
+The tag is the only thing to set. There is no version to bump by hand:
+
+```bash
+git tag v1.1.0 && git push origin master --tags
+```
+
+That starts [.github/workflows/release.yml](.github/workflows/release.yml),
+which does the whole thing in order:
+
+| Job | What it does |
+|---|---|
+| `verify` | Rejects a tag that is not a stampable version, in seconds |
+| `windows` | Calls [build-windows.yml](.github/workflows/build-windows.yml) |
+| `macos` | Calls [build-macos.yml](.github/workflows/build-macos.yml) |
+| `linux` | Calls [build-linux.yml](.github/workflows/build-linux.yml) |
+| `release` | Publishes, **only if all three builds succeeded** |
+
+Each build runs [stamp_version.py](stamp_version.py) before compiling, which
+rewrites the `__version__` line in
+[pubmed_csv/version.py](pubmed_csv/version.py) to the tag — so tagging `v1.1.0`
+produces builds reporting `1.1.0`, and the update check stops offering an
+update the moment you are running the latest tag. `pyproject.toml` reads that
+same file, so the packaged version follows too. The value committed in
+`version.py` is only what a local, untagged build reports.
+
+Tags must be numeric (`v1.1.0`, `v2.0`); anything else, `v1.2.0-rc1` included,
+is refused by `verify` rather than producing a build with a bogus version.
+
+The builds publish nothing themselves — they only produce artifacts, so a
+half-finished release cannot appear when one platform fails. The release job
+also refuses to publish unless all three files are present, rather than
+shipping a release quietly missing a platform.
+
+Versions compare as dotted numbers, so `v1.10.0` correctly ranks after `v1.2.0`,
+and drafts and prereleases are ignored.
+
+### Recent searches
+
+Every search you run is remembered. The **Recent searches** dropdown, next to
+*+ Add keyword*, refills the whole form when you pick one — keywords and
+operators both — so you can re-run it or tweak it instead of retyping it.
+
+The history keeps the **last 20** searches, newest first. Re-running an old one
+moves it back to the top rather than duplicating it, and blank rows are dropped
+before it is stored. It persists between launches, in:
+
+| | |
+|---|---|
+| Windows | `%APPDATA%\PubMedSearch\history.json` |
+| macOS | `~/Library/Application Support/PubMedSearch/history.json` |
+| Linux | `~/.config/PubMedSearch/history.json` |
+
+Deleting that file clears the history. If it is missing or damaged the app
+starts with an empty history rather than complaining.
 
 ### How many results
 
@@ -205,6 +275,8 @@ response, with no extra requests.
 | File | Purpose |
 |------|---------|
 | [pubmed_csv/query.py](pubmed_csv/query.py) | Builds the boolean query from the keyword rows |
+| [pubmed_csv/history.py](pubmed_csv/history.py) | Stores and reloads recent searches |
+| [pubmed_csv/updates.py](pubmed_csv/updates.py) | Checks GitHub for a newer release |
 | [pubmed_csv/export.py](pubmed_csv/export.py) | Runs the search, writes the Excel and CSV files |
 | [pubmed_csv/app.py](pubmed_csv/app.py) | Tkinter window |
 

@@ -1,6 +1,8 @@
 [project]
 name = "pubmed-csv"
-version = "0.1.0"
+# Single-sourced from pubmed_csv/version.py, which the update check also reads,
+# so the packaged version and the reported version cannot drift apart.
+dynamic = ["version"]
 description = "Desktop app to search PubMed by keyword and export results to CSV"
 requires-python = ">=3.11"
 dependencies = [
@@ -18,3 +20,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["pubmed_csv"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pubmed_csv.version.__version__" }
