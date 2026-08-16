@@ -38,9 +38,11 @@ jobs:
           if (-not (Test-Path dist/PubMedSearch.exe)) { throw "PubMedSearch.exe is missing" }
           Get-Item dist/PubMedSearch.exe | Select-Object Name, Length
 
-      # Download this from the run's summary page once the job is green.
-      - uses: actions/upload-artifact@v4
+      # archive: false uploads the file as-is, so downloading from the run page
+      # gives PubMedSearch.exe itself rather than a zip around it. It needs
+      # upload-artifact v7+, and it takes the artifact name from the filename.
+      - uses: actions/upload-artifact@v7
         with:
-          name: PubMedSearch
           path: dist/PubMedSearch.exe
+          archive: false
           if-no-files-found: error

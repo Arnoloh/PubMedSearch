@@ -50,8 +50,9 @@ jobs:
       contents: write
 
     steps:
-      # Every artifact from the builds above, each in its own subdirectory.
-      - uses: actions/download-artifact@v4
+      # Every artifact from the builds above. v8 matches the upload-artifact v7
+      # the builds use, so the un-archived uploads come back as plain files.
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -69,7 +70,7 @@ jobs:
           missing=""
           for expected in \
             "PubMedSearch.exe" \
-            "PubMedSearch-macos-arm64" \
+            "PubMedSearch-macos-arm64.zip" \
             "PubMedSearch-linux-amd64"
           do
             test -f "release/$expected" || missing="$missing $expected"

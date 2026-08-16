@@ -44,17 +44,23 @@ jobs:
       - name: Build
         run: pyinstaller PubMedSearch.spec
 
-      # The single-file binary, named for the platform it was built on. The
-      # .app bundle the spec also produces is left behind: it is a directory,
-      # so it cannot be shipped as one file without an archive.
-      - name: Name the binary for this platform
+      # macOS ships the .app, not the bare binary: double-clicking a bare Unix
+      # executable opens a Terminal window behind the GUI.
+      #
+      # A .app is a directory, so it has to be archived to travel as one file.
+      # ditto is what keeps the executable bit and the ad-hoc signature intact
+      # — uploading the directory itself strips both and produces a bundle
+      # macOS refuses to open.
+      - name: Package the app
         run: |
-          test -f dist/PubMedSearch
-          mv dist/PubMedSearch PubMedSearch-macos-arm64
+          test -d dist/PubMedSearch.app
+          ditto -c -k --keepParent dist/PubMedSearch.app PubMedSearch-macos-arm64.zip
 
-      # Download this from the run's summary page once the job is green.
-      - uses: actions/upload-artifact@v4
+      # archive: false uploads this zip as-is. Without it Actions would wrap it
+      # in a second zip, and the download would be a zip inside a zip. Needs
+      # upload-artifact v7+, and it takes the artifact name from the filename.
+      - uses: actions/upload-artifact@v7
         with:
-          name: PubMedSearch-macos-arm64
-          path: PubMedSearch-macos-arm64
+          path: PubMedSearch-macos-arm64.zip
+          archive: false
           if-no-files-found: error

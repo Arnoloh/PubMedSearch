@@ -41,14 +41,20 @@ Windows executable** → **Run workflow**; when the job turns green, the
 
 One workflow per target, each runnable on its own from the **Actions** tab:
 
-One workflow per target, each runnable on its own from the **Actions** tab, and
-each producing a single self-contained binary — no archive around it:
+One workflow per target, each runnable on its own from the **Actions** tab:
 
-| Workflow | Runner | Binary |
+| Workflow | Runner | Output |
 |---|---|---|
 | [build-windows.yml](.github/workflows/build-windows.yml) | `windows-latest` | `PubMedSearch.exe` |
-| [build-macos.yml](.github/workflows/build-macos.yml) | `macos-latest` (arm64) | `PubMedSearch-macos-arm64` |
+| [build-macos.yml](.github/workflows/build-macos.yml) | `macos-latest` (arm64) | `PubMedSearch-macos-arm64.zip`, holding `PubMedSearch.app` |
 | [build-linux.yml](.github/workflows/build-linux.yml) | `ubuntu-24.04` (x86_64) | `PubMedSearch-linux-amd64` |
+
+Windows and Linux ship the bare binary. **macOS ships the `.app`**, because
+double-clicking a bare Unix executable opens a Terminal window behind the GUI.
+A `.app` is a directory, so it is the one target that needs an archive to
+travel as a single file — and it is zipped with `ditto` specifically, which
+preserves the executable bit and the ad-hoc signature that a plain directory
+upload would strip, leaving a bundle macOS refuses to open.
 
 Each build asserts `uname -m` matches the architecture its name promises, so it
 fails loudly rather than shipping an arm64 binary labelled amd64 if a runner
@@ -56,25 +62,28 @@ label is ever repointed. The Linux build installs `python3-tk` first: without
 the Tcl/Tk runtime beside it, PyInstaller happily bundles an app that dies on
 launch with no window.
 
-**On macOS and Linux, mark the download executable before running it:**
+Artifacts are uploaded with `archive: false`, so a download is the file itself
+rather than a zip wrapped around it — the Windows download is `PubMedSearch.exe`
+directly, and the macOS one is a single zip holding the `.app` instead of a zip
+inside a zip. That input needs **upload-artifact v7+**; on v4 it is silently
+ignored and the extra zip comes back.
+
+#### Running what you downloaded
+
+**macOS.** Unzip `PubMedSearch-macos-arm64.zip` to get `PubMedSearch.app`. Being
+unsigned it is not notarised, so Gatekeeper blocks it on first open — right-click
+→ *Open*, or:
 
 ```bash
-chmod +x PubMedSearch-macos-arm64
-./PubMedSearch-macos-arm64
+xattr -dr com.apple.quarantine PubMedSearch.app
 ```
 
-A downloaded file never carries the executable bit — neither an Actions
-artifact nor a release asset preserves it. That is the cost of shipping bare
-binaries instead of archives.
-
-Two more consequences on macOS. The binary is not the `PubMedSearch.app` bundle
-that the spec still builds for local use, so double-clicking it in Finder opens
-a Terminal window behind the app; launching from the terminal, or building the
-`.app` locally, avoids that. And being unsigned it is not notarised, so
-Gatekeeper blocks it on first run — clear it with:
+**Linux.** A downloaded file never carries the executable bit, since neither an
+artifact nor a release asset preserves permissions:
 
 ```bash
-xattr -d com.apple.quarantine PubMedSearch-macos-arm64
+chmod +x PubMedSearch-linux-amd64
+./PubMedSearch-linux-amd64
 ```
 
 ### On a Windows machine

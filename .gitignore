@@ -8,3 +8,4 @@ dist/
 
 # Exported results
 *.csv
+.DS_Store
