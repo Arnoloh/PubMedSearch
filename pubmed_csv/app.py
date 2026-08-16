@@ -14,14 +14,18 @@ from pubmed_csv.export import (
     write_csv,
     write_xlsx,
 )
-from pubmed_csv import history, updates
+from pubmed_csv import assets, guide, history, updates, widgets
 from pubmed_csv.query import OPERATORS, Term, build_query
 from pubmed_csv.version import __version__
+from pubmed_csv.widgets import MUTED_COLOUR
 
 WINDOW_TITLE = "PubMed Search"
 PAD = 8
 POLL_INTERVAL_MS = 100
 UPDATE_FIRST_CHECK_MS = 1200  # let the window draw before any update dialog
+
+AUTHOR = "Arnoloh"
+REPO_URL = "https://github.com/Arnoloh/PubMedSearch"
 
 # Results table columns: (id, heading, starting width, minimum width).
 # No column stretches: Tk overrides the width of a stretching column to fill
@@ -93,6 +97,9 @@ class PubMedApp(ttk.Frame):
 
         self.rows: list[KeywordRow] = []
         self.articles: list = []
+        # One entry per removal, each the row ids it took out: the undo stack.
+        self.removals: list[list[str]] = []
+        self.guide_window: tk.Toplevel | None = None
         self.results_queue: queue.Queue = queue.Queue()
         self.searching = False
         self.cancel_event = threading.Event()
@@ -112,6 +119,7 @@ class PubMedApp(ttk.Frame):
         self._add_row()
         self._add_row()
         master.bind("<Return>", lambda _event: self._start_search())
+        master.bind("<F1>", self._show_guide)  # where Windows looks for help
         self.rows[0].entry.focus_set()
         self._start_update_check()
 
@@ -224,23 +232,44 @@ class PubMedApp(ttk.Frame):
 
         toolbar = ttk.Frame(frame)
         toolbar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, PAD // 2))
-        toolbar.columnconfigure(0, weight=1)
+        toolbar.columnconfigure(3, weight=1)
+
+        self.remove_button = ttk.Button(
+            toolbar,
+            text="Remove selected",
+            command=self._remove_selected_rows,
+            state="disabled",
+        )
+        self.remove_button.grid(row=0, column=0, sticky="w")
+
+        self.undo_button = ttk.Button(
+            toolbar, text="Undo removal", command=self._undo_removal, state="disabled"
+        )
+        self.undo_button.grid(row=0, column=1, sticky="w", padx=(PAD // 2, 0))
+
+        self.restore_button = ttk.Button(
+            toolbar, text="Restore all", command=self._restore_rows, state="disabled"
+        )
+        self.restore_button.grid(row=0, column=2, sticky="w", padx=(PAD // 2, 0))
+
+        # Short on purpose: five buttons and this line have to share a row
+        # narrower than the table beneath them, or the text is cut off.
         ttk.Label(
             toolbar,
-            text="Drag a column edge to resize it.",
-        ).grid(row=0, column=0, sticky="w")
+            text="Delete removes rows, Ctrl+Z undoes.",
+        ).grid(row=0, column=3, sticky="w", padx=(PAD, 0))
         ttk.Button(toolbar, text="Fit to content", command=self._fit_columns).grid(
-            row=0, column=1, sticky="e"
+            row=0, column=4, sticky="e"
         )
         ttk.Button(toolbar, text="Reset widths", command=self._reset_columns).grid(
-            row=0, column=2, sticky="e", padx=(PAD // 2, 0)
+            row=0, column=5, sticky="e", padx=(PAD // 2, 0)
         )
 
         self.tree = ttk.Treeview(
             frame,
             columns=[column for column, *_ in RESULT_COLUMNS],
             show="headings",
-            selectmode="browse",
+            selectmode="extended",  # ctrl/shift-click, so whole runs go at once
         )
         for column, heading, width, minwidth in RESULT_COLUMNS:
             self.tree.heading(column, text=heading)
@@ -256,6 +285,120 @@ class PubMedApp(ttk.Frame):
         vertical.grid(row=1, column=1, sticky="ns")
         horizontal.grid(row=2, column=0, sticky="ew")
         self.tree.bind("<Double-1>", self._open_selected)
+        # BackSpace as well as Delete: on a Mac keyboard, the key labelled
+        # "delete" is BackSpace.
+        self.tree.bind("<Delete>", self._remove_selected_rows)
+        self.tree.bind("<BackSpace>", self._remove_selected_rows)
+        # Command-z never fires off a Mac, and Control-z is the habit on
+        # Windows, so binding both costs nothing and covers either keyboard.
+        self.tree.bind("<Control-z>", self._undo_removal)
+        self.tree.bind("<Command-z>", self._undo_removal)
+        # ttk's Treeview has no select-all of its own, and picking rows out is
+        # half of what this table is for.
+        self.tree.bind("<Control-a>", self._select_all_rows)
+        self.tree.bind("<Command-a>", self._select_all_rows)
+
+    # -------------------------------------------------------- result rows
+
+    def _populate_tree(self) -> None:
+        """Show every retrieved article; each row's id is its index in the list."""
+        self.tree.delete(*self.tree.get_children())
+        for index, article in enumerate(self.articles):
+            self.tree.insert("", "end", iid=str(index), values=self._row_values(article))
+        self.removals = []  # a full table has nothing left to undo
+        self._update_result_buttons()
+
+    def _row_values(self, article) -> tuple:
+        return (article.title, article.pmid, article.doi or "", article.url)
+
+    def _kept_articles(self) -> list:
+        """The articles still in the table, in the order they are shown."""
+        return [self.articles[int(item)] for item in self.tree.get_children()]
+
+    def _select_all_rows(self, _event=None) -> str:
+        """Select every row still in the table."""
+        self.tree.selection_set(self.tree.get_children())
+        return "break"
+
+    def _remove_selected_rows(self, _event=None) -> None:
+        """Drop the selected rows so they are left out of the export."""
+        selection = set(self.tree.selection())
+        if not selection:
+            return
+
+        remaining = [
+            item for item in self.tree.get_children() if item not in selection
+        ]
+        # Remember this batch, in table order, so Undo can put it back.
+        self.removals.append(
+            [item for item in self.tree.get_children() if item in selection]
+        )
+        self.tree.delete(*selection)
+
+        if remaining:
+            # Leave a row selected so a run of removals needs no re-aiming:
+            # the first row left below what went, or the last one if nothing
+            # is left below. Row ids are indices, so they sort by position.
+            last_gone = max(int(item) for item in selection)
+            follow = next(
+                (item for item in remaining if int(item) > last_gone), remaining[-1]
+            )
+            self.tree.selection_set(follow)
+            self.tree.focus(follow)
+            self.tree.see(follow)
+
+        self._update_result_buttons()
+        self.status.set(self._kept_summary())
+
+    def _undo_removal(self, _event=None) -> None:
+        """Put back the rows of the most recent removal, and only those."""
+        if not self.removals:
+            return
+
+        restored = self.removals.pop()
+        for item in restored:
+            self._insert_row(item)
+
+        # Select what came back: it says at a glance what the undo did, and
+        # scrolls it into view when it went off the top or bottom.
+        self.tree.selection_set(restored)
+        self.tree.focus(restored[0])
+        self.tree.see(restored[0])
+
+        self._update_result_buttons()
+        self.status.set(self._kept_summary())
+
+    def _insert_row(self, item: str) -> None:
+        """Insert a row back where its article belongs, in search order."""
+        index = int(item)
+        position = sum(1 for child in self.tree.get_children() if int(child) < index)
+        self.tree.insert(
+            "", position, iid=item, values=self._row_values(self.articles[index])
+        )
+
+    def _restore_rows(self) -> None:
+        """Put every removed row back."""
+        self._populate_tree()
+        self.status.set(self._kept_summary())
+
+    def _kept_summary(self) -> str:
+        kept = len(self.tree.get_children())
+        total = len(self.articles)
+        if not kept:
+            return f"All {total:,} rows removed. Restore all brings them back."
+        if kept == total:
+            return f"All {total:,} rows kept."
+        return f"{kept:,} of {total:,} rows kept — Export saves these {kept:,}."
+
+    def _update_result_buttons(self) -> None:
+        """Only offer what the table can currently do."""
+        kept = len(self.tree.get_children())
+        self.export_button.configure(state="normal" if kept else "disabled")
+        self.remove_button.configure(state="normal" if kept else "disabled")
+        self.undo_button.configure(state="normal" if self.removals else "disabled")
+        self.restore_button.configure(
+            state="normal" if kept < len(self.articles) else "disabled"
+        )
 
     # ---------------------------------------------------- column widths
 
@@ -279,17 +422,82 @@ class PubMedApp(ttk.Frame):
     def _build_status_bar(self) -> None:
         frame = ttk.Frame(self)
         frame.grid(row=5, column=0, sticky="ew", pady=(PAD, 0))
-        frame.columnconfigure(0, weight=1)  # the status text takes the free space
+        # Column 1 is an empty spacer, sized in _centre_status_text; 1 and 3
+        # take equal shares of the free space, so the text between them stays
+        # put as the window is resized. 2 takes a share too, and being weighted
+        # is what lets a long line shrink rather than shove the corners off.
+        for column in (1, 2, 3):
+            frame.columnconfigure(column, weight=1)
 
-        ttk.Label(frame, textvariable=self.status, anchor="w").grid(
-            row=0, column=0, sticky="ew"
-        )
+        self.help_button = widgets.CircleButton(frame, "?", self._show_guide)
+        self.help_button.grid(row=0, column=0, sticky="w", padx=(0, PAD))
+
+        self.status_label = ttk.Label(frame, textvariable=self.status, anchor="center")
+        self.status_label.grid(row=0, column=2, sticky="ew")
+        self.status_label.bind("<Configure>", self._fit_status_anchor)
+        self.status.trace_add("write", lambda *_: self._fit_status_anchor())
+
+        self.credit_label = self._build_credit(frame)
+        self.credit_label.grid(row=0, column=4, sticky="e", padx=(PAD, 0))
 
         # The running version, in the corner: it is what a bug report needs, and
         # it says at a glance whether an update actually took.
-        ttk.Label(frame, text=f"v{__version__}", foreground="grey").grid(
-            row=0, column=1, sticky="e", padx=(PAD, 0)
+        self.version_label = ttk.Label(
+            frame, text=f"v{__version__}", foreground=MUTED_COLOUR
         )
+        self.version_label.grid(row=0, column=5, sticky="e", padx=(PAD, 0))
+
+        self.after_idle(self._centre_status_text)
+
+    def _centre_status_text(self) -> None:
+        """Widen the spacer left of the status text until it centres on the bar.
+
+        The ? button on one side, the credit and the version on the other, are
+        nowhere near the same width. Text merely centred in the gap between
+        them would sit well left of the middle of the window; matching the
+        narrow side up to the wide one is what puts it in the middle.
+        """
+        left = self.help_button.winfo_reqwidth() + PAD
+        right = sum(
+            widget.winfo_reqwidth() + PAD
+            for widget in (self.credit_label, self.version_label)
+        )
+        self.help_button.master.columnconfigure(1, minsize=max(right - left, 0))
+
+    def _fit_status_anchor(self, _event=None) -> None:
+        """Centre the status line, unless it is too long to fit.
+
+        The long ones — what a finished search reports — overflow the middle of
+        the bar. Centred, they would be cut at both ends and lose the count
+        they open with; starting them at the left only ever costs the tail.
+        """
+        text_width = tkfont.nametofont("TkDefaultFont").measure(self.status.get())
+        fits = text_width <= self.status_label.winfo_width()
+        self.status_label.configure(anchor="center" if fits else "w")
+
+    def _build_credit(self, parent: ttk.Frame) -> ttk.Label:
+        """Who wrote it, behind the GitHub mark, linking to the repository."""
+        # Held on self: Tk drops an image the moment nothing else refers to it,
+        # and the label is then left showing a blank.
+        self.github_mark = tk.PhotoImage(
+            data=assets.github_mark(float(self.tk.call("tk", "scaling")))
+        )
+        return widgets.link_label(
+            parent,
+            f" Created by {AUTHOR}",  # the space is the gap after the mark
+            REPO_URL,
+            image=self.github_mark,
+        )
+
+    def _show_guide(self, _event=None) -> None:
+        """Open the features window, or raise the one already open."""
+        if self.guide_window is not None and self.guide_window.winfo_exists():
+            self.guide_window.deiconify()
+            self.guide_window.lift()
+            self.guide_window.focus_set()
+            return
+
+        self.guide_window = guide.open_window(self, __version__, REPO_URL)
 
     # ------------------------------------------------------- keyword rows
 
@@ -450,15 +658,7 @@ class PubMedApp(ttk.Frame):
 
     def _show_results(self, outcome: SearchOutcome) -> None:
         self.articles = outcome.articles
-        self.tree.delete(*self.tree.get_children())
-        for article in self.articles:
-            self.tree.insert(
-                "",
-                "end",
-                values=(article.title, article.pmid, article.doi or "", article.url),
-            )
-
-        self.export_button.configure(state="normal" if self.articles else "disabled")
+        self._populate_tree()
         self.status.set(self._result_summary(outcome))
 
     def _result_summary(self, outcome: SearchOutcome) -> str:
@@ -472,7 +672,7 @@ class PubMedApp(ttk.Frame):
         if not retrieved:
             return "No article found for this query."
 
-        tail = " Double-click a row to open it."
+        tail = " Double-click a row to open it, or remove the ones you do not want."
         if retrieved == total:
             return f"Retrieved all {total:,} matching articles.{tail}"
         if outcome.capped_by_api:
@@ -495,8 +695,9 @@ class PubMedApp(ttk.Frame):
     # ------------------------------------------------------------ export
 
     def _export(self) -> None:
-        """Save the results, as Excel or CSV depending on the chosen name."""
-        if not self.articles:
+        """Save the kept rows, as Excel or CSV depending on the chosen name."""
+        articles = self._kept_articles()
+        if not articles:
             return
 
         path = filedialog.asksaveasfilename(
@@ -514,12 +715,12 @@ class PubMedApp(ttk.Frame):
 
         write = write_csv if path.lower().endswith(".csv") else write_xlsx
         try:
-            write(self.articles, path)
+            write(articles, path)
         except OSError as error:
             messagebox.showerror("Export failed", str(error))
             return
 
-        self.status.set(f"Saved {len(self.articles):,} articles to {path}")
+        self.status.set(f"Saved {len(articles):,} articles to {path}")
 
     def _open_selected(self, _event=None) -> None:
         selection = self.tree.selection()

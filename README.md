@@ -57,9 +57,22 @@ corner of the window.
 
 - A table with the **title**, **PMID**, **DOI** and **link** of every article.
 - Double-click a row to open the article in your browser.
+- Sort out what you actually want before exporting: select rows - `Ctrl`-click
+  for several, `Shift`-click for a run, `Ctrl+A` for all of them - and press
+  `Remove selected` or the `Delete` key. Only the rows still in the table are
+  exported.
+- Changed your mind? `Undo removal` (or `Ctrl+Z`) takes back the last removal
+  and only that one, as many times as needed; `Restore all` brings every
+  removed row back at once.
 - Drag a column edge to resize it, or use `Fit to content` / `Reset widths`.
 - Titles containing italics - gene and species names, which are everywhere on
   PubMed - are shown in full rather than cut off at the first italicised word.
+
+**Finding your way around**
+
+- The round `?` button in the bottom-left corner (or `F1`) opens a window with
+  two pages: `Features`, the whole list below in the app itself, and
+  `Shortcuts`, every key and mouse gesture it answers to. No internet needed.
 
 **Exporting**
 
@@ -75,7 +88,9 @@ corner of the window.
 2. **Check the query.** The `Query` field shows what will be sent to PubMed, so
    nothing is guessed on your behalf.
 3. **Search.** Press `Search` or hit `Enter`.
-4. **Export.** Press `Export…` and give the file a name ending in `.xlsx` or
+4. **Sort the results.** Remove the rows you do not want: select them and press
+   `Remove selected` or `Delete`.
+5. **Export.** Press `Export…` and give the file a name ending in `.xlsx` or
    `.csv`.
 
 ## Good to know
@@ -100,5 +115,5 @@ The simplest way is to open an
 you did and what you expected. Contributions to the code are just as welcome.
 
 # TODO
-- [ ] Filter rows before export (export only the relevant ones)
+- [x] Filter rows before export (export only the relevant ones)
 - [ ] Compile for macos and linux

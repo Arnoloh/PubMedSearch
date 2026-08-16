@@ -10,4 +10,4 @@ Keep the line below in the form `__version__ = "<digits and dots>"` — that is
 the exact shape stamp_version.py's regex rewrites.
 """
 
-__version__ = "1.2.0"
+__version__ = "0.0.1"

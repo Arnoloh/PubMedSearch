@@ -65,10 +65,23 @@ est affiché en bas à droite de la fenêtre.
 - Un tableau avec le **titre**, le **PMID**, le **DOI** et le **lien** de chaque
   article.
 - Double-cliquez sur une ligne pour ouvrir l'article dans votre navigateur.
+- Triez ce que vous voulez vraiment garder avant d'exporter : sélectionnez des
+  lignes - `Ctrl`-clic pour plusieurs, `Maj`-clic pour une suite, `Ctrl+A` pour
+  toutes - puis `Remove selected` ou la touche `Suppr`. Seules les lignes
+  encore présentes dans le tableau sont exportées.
+- Erreur de manipulation ? `Undo removal` (ou `Ctrl+Z`) annule la dernière
+  suppression, et elle seule, autant de fois que nécessaire ; `Restore all`
+  remet toutes les lignes supprimées d'un coup.
 - Faites glisser le bord d'une colonne pour la redimensionner, ou utilisez
   `Fit to content` / `Reset widths`.
 - Les titres contenant de l'italique - noms de gènes et d'espèces, omniprésents
   sur PubMed - sont affichés en entier, et non coupés au premier mot en italique.
+
+**S'y retrouver**
+
+- Le bouton rond `?` en bas à gauche (ou `F1`) ouvre une fenêtre à deux pages :
+  `Features`, toute la liste ci-dessous dans l'application elle-même, et
+  `Shortcuts`, tous les raccourcis clavier et souris. Sans internet.
 
 **Exporter**
 
@@ -85,7 +98,9 @@ est affiché en bas à droite de la fenêtre.
 2. **Vérifiez la requête.** Le champ `Query` montre ce qui sera envoyé à PubMed :
    rien n'est deviné à votre place.
 3. **Cherchez.** Appuyez sur `Search` ou sur `Entrée`.
-4. **Exportez.** Appuyez sur `Export…` et donnez au fichier un nom terminé par
+4. **Triez les résultats.** Supprimez les lignes dont vous ne voulez pas :
+   sélectionnez-les puis `Remove selected` ou la touche `Suppr`.
+5. **Exportez.** Appuyez sur `Export…` et donnez au fichier un nom terminé par
    `.xlsx` ou `.csv`.
 
 ## Bon à savoir
@@ -113,5 +128,5 @@ ce que vous avez fait et ce que vous attendiez. Les contributions au code sont
 tout aussi bienvenues.
 
 # TODO
-- [ ] Permettre de filtrer les lignes à exporter
+- [x] Permettre de filtrer les lignes à exporter
 - [ ] Compiler pour macOS et Linux
