@@ -83,15 +83,17 @@ jobs:
             exit 1
           fi
 
-      # - name: Package the macOS app for the GitHub release
-      #   run: zip -yr release/PubMedSearch-macos-arm64.zip release/PubMedSearch-macos-arm64.app
+      - name: Package the macOS app for the GitHub release
+        run: |
+          cd release
+          zip -yr PubMedSearch-macos-arm64.zip PubMedSearch-macos-arm64.app
 
       - name: Publish the release
         run: |
           gh release create "$GITHUB_REF_NAME" \
             release/PubMedSearch.exe \
             release/PubMedSearch-linux-amd64 \
-            release/PubMedSearch-macos-arm64.app \
+            release/PubMedSearch-macos-arm64.zip \
             --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
