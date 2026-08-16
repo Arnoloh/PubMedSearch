@@ -69,8 +69,8 @@ jobs:
           missing=""
           for expected in \
             "PubMedSearch.exe" \
-            "PubMedSearch-macos-arm64.zip" \
-            "PubMedSearch-linux-amd64.tar.gz"
+            "PubMedSearch-macos-arm64" \
+            "PubMedSearch-linux-amd64"
           do
             test -f "release/$expected" || missing="$missing $expected"
           done

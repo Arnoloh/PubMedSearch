@@ -44,16 +44,17 @@ jobs:
       - name: Build
         run: pyinstaller PubMedSearch.spec
 
-      # ditto keeps the bundle's permissions and ad-hoc signature, which a
-      # plain upload-artifact zip strips, leaving a .app that will not open.
-      - name: Package the app
+      # The single-file binary, named for the platform it was built on. The
+      # .app bundle the spec also produces is left behind: it is a directory,
+      # so it cannot be shipped as one file without an archive.
+      - name: Name the binary for this platform
         run: |
-          test -d dist/PubMedSearch.app
-          ditto -c -k --keepParent dist/PubMedSearch.app PubMedSearch-macos-arm64.zip
+          test -f dist/PubMedSearch
+          mv dist/PubMedSearch PubMedSearch-macos-arm64
 
       # Download this from the run's summary page once the job is green.
       - uses: actions/upload-artifact@v4
         with:
           name: PubMedSearch-macos-arm64
-          path: PubMedSearch-macos-arm64.zip
+          path: PubMedSearch-macos-arm64
           if-no-files-found: error

@@ -48,16 +48,15 @@ jobs:
       - name: Build
         run: pyinstaller PubMedSearch.spec
 
-      # tar rather than a plain artifact upload, which would strip the
-      # executable bit and leave a binary nobody can run.
-      - name: Package the binary
+      # The single-file binary, named for the platform it was built on.
+      - name: Name the binary for this platform
         run: |
           test -f dist/PubMedSearch
-          tar czf PubMedSearch-linux-amd64.tar.gz -C dist PubMedSearch
+          mv dist/PubMedSearch PubMedSearch-linux-amd64
 
       # Download this from the run's summary page once the job is green.
       - uses: actions/upload-artifact@v4
         with:
           name: PubMedSearch-linux-amd64
-          path: PubMedSearch-linux-amd64.tar.gz
+          path: PubMedSearch-linux-amd64
           if-no-files-found: error

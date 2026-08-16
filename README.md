@@ -41,26 +41,41 @@ Windows executable** → **Run workflow**; when the job turns green, the
 
 One workflow per target, each runnable on its own from the **Actions** tab:
 
-| Workflow | Runner | Artifact |
+One workflow per target, each runnable on its own from the **Actions** tab, and
+each producing a single self-contained binary — no archive around it:
+
+| Workflow | Runner | Binary |
 |---|---|---|
 | [build-windows.yml](.github/workflows/build-windows.yml) | `windows-latest` | `PubMedSearch.exe` |
-| [build-macos.yml](.github/workflows/build-macos.yml) | `macos-latest` (arm64) | `PubMedSearch-macos-arm64.zip` |
-| [build-linux.yml](.github/workflows/build-linux.yml) | `ubuntu-24.04` (x86_64) | `PubMedSearch-linux-amd64.tar.gz` |
+| [build-macos.yml](.github/workflows/build-macos.yml) | `macos-latest` (arm64) | `PubMedSearch-macos-arm64` |
+| [build-linux.yml](.github/workflows/build-linux.yml) | `ubuntu-24.04` (x86_64) | `PubMedSearch-linux-amd64` |
 
-The macOS build produces a real `PubMedSearch.app`, so it opens from Finder
-instead of launching a Terminal window, and it is zipped with `ditto` to keep
-the bundle's permissions and ad-hoc signature — a plain artifact upload strips
-those and leaves an app that refuses to open. The Linux binary is tarred for
-the same reason: a bare upload loses the executable bit.
+Each build asserts `uname -m` matches the architecture its name promises, so it
+fails loudly rather than shipping an arm64 binary labelled amd64 if a runner
+label is ever repointed. The Linux build installs `python3-tk` first: without
+the Tcl/Tk runtime beside it, PyInstaller happily bundles an app that dies on
+launch with no window.
 
-Each build asserts `uname -m` matches the architecture its artifact name
-promises, so it fails loudly rather than shipping an arm64 binary labelled
-amd64 if a runner label is ever repointed. The Linux build installs
-`python3-tk` first: without the Tcl/Tk runtime beside it, PyInstaller happily
-bundles an app that dies on launch with no window.
+**On macOS and Linux, mark the download executable before running it:**
 
-Being unsigned, the macOS app is not notarised — Gatekeeper blocks it on first
-open, and the way past is right-click → *Open* rather than a double-click.
+```bash
+chmod +x PubMedSearch-macos-arm64
+./PubMedSearch-macos-arm64
+```
+
+A downloaded file never carries the executable bit — neither an Actions
+artifact nor a release asset preserves it. That is the cost of shipping bare
+binaries instead of archives.
+
+Two more consequences on macOS. The binary is not the `PubMedSearch.app` bundle
+that the spec still builds for local use, so double-clicking it in Finder opens
+a Terminal window behind the app; launching from the terminal, or building the
+`.app` locally, avoids that. And being unsigned it is not notarised, so
+Gatekeeper blocks it on first run — clear it with:
+
+```bash
+xattr -d com.apple.quarantine PubMedSearch-macos-arm64
+```
 
 ### On a Windows machine
 
