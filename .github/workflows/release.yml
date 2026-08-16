@@ -60,7 +60,7 @@ jobs:
           mkdir -p release
           mv artifacts/PubMedSearch.exe/PubMedSearch.exe release/
           mv artifacts/PubMedSearch-linux-amd64/PubMedSearch-linux-amd64 release/
-          mv artifacts/PubMedSearch-macos-arm64.app/PubMedSearch.app release/PubMedSearch-macos-arm64.app
+          mv artifacts/PubMedSearch-macos-arm64.app release/PubMedSearch-macos-arm64.app
           ls -lh release
 
       # The release promises three platforms, so refuse to publish a partial
