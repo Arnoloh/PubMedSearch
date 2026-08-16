@@ -19,6 +19,7 @@ en une seule passe.
 - [Comment l'utiliser](#comment-lutiliser)
 - [Bon à savoir](#bon-à-savoir)
 - [Retours et contributions](#retours-et-contributions)
+- [TODO](#todo)
 
 ## Installation
 
@@ -110,3 +111,7 @@ Le plus simple est d'ouvrir une
 [issue](https://github.com/Arnoloh/PubMedSearch/issues) sur GitHub, en décrivant
 ce que vous avez fait et ce que vous attendiez. Les contributions au code sont
 tout aussi bienvenues.
+
+# TODO
+- [ ] Permettre de filtrer les lignes à exporter
+- [ ] Compiler pour macOS et Linux

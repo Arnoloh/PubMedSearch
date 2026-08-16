@@ -18,6 +18,7 @@ one pass.
 - [How to use it](#how-to-use-it)
 - [Good to know](#good-to-know)
 - [Feedback and contributions](#feedback-and-contributions)
+- [TODO](#todo)
 
 ## Install
 
@@ -97,3 +98,7 @@ for ideas: a field you wish were exported, a step you wish were quicker.
 The simplest way is to open an
 [issue](https://github.com/Arnoloh/PubMedSearch/issues) on GitHub, describing what
 you did and what you expected. Contributions to the code are just as welcome.
+
+# TODO
+- [ ] Filter rows before export (export only the relevant ones)
+- [ ] Compile for macos and linux
